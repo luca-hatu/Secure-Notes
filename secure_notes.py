@@ -1,86 +1,101 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 from cryptography.fernet import Fernet
 import os
-import getpass
 
-def load_key():
-    key_file = "key.key"
-    if os.path.exists(key_file):
-        return open(key_file, "rb").read()
-    else:
-        key = Fernet.generate_key()
-        with open(key_file, "wb") as key_file:
-            key_file.write(key)
-        return key
+class SecureNoteApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Secure Note App")
 
-def encrypt_message(message, key):
-    fernet = Fernet(key)
-    encrypted = fernet.encrypt(message.encode())
-    return encrypted
+        self.key = self.load_key()
+        self.correct_password = "password"  
+        self.master_password = "master_password" 
+        self.attempts = 0
 
-def decrypt_message(encrypted_message, key):
-    fernet = Fernet(key)
-    decrypted = fernet.decrypt(encrypted_message).decode()
-    return decrypted
+        self.note_text = tk.Text(self.root, height=10, width=50)
+        self.note_text.pack(pady=10)
 
-def save_to_file(encrypted_message):
-    with open("notes.txt", "wb") as file:
-        file.write(encrypted_message)
+        encrypt_button = tk.Button(self.root, text="Add Note", command=self.add_note)
+        encrypt_button.pack(pady=5)
+        view_button = tk.Button(self.root, text="View Notes", command=self.view_notes)
+        view_button.pack(pady=5)
 
-def load_from_file():
-    with open("notes.txt", "rb") as file:
-        encrypted_message = file.read()
-    return encrypted_message
+        menu_bar = tk.Menu(self.root)
+        file_menu = tk.Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="Save Note", command=self.add_note)
+        file_menu.add_command(label="Load Note", command=self.view_notes)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=root.quit)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+        self.root.config(menu=menu_bar)
 
-def check_password(password, correct_password):
-    return password == correct_password
-
-def main():
-    key = load_key()
-    correct_password = "reese" 
-    master_password = "master_password" 
-    attempts = 0
-
-    while True:
-        print("\n1. Add a note")
-        print("2. View notes")
-        print("3. Exit")
-        choice = input("Enter your choice: ")
-
-        if choice == "1":
-            note = input("Enter your note: ")
-            encrypted_note = encrypt_message(note, key)
-            save_to_file(encrypted_note)
-            print("Note added successfully.")
-
-        elif choice == "2":
-            if attempts >= 3:
-                print("Notes are locked. Enter master password to unlock.")
-                password = getpass.getpass("Enter master password: ")
-                if check_password(password, master_password):
-                    attempts = 0
-                    print("Unlocked successfully.")
-                else:
-                    print("Incorrect master password.")
-                    continue
-
-            password = getpass.getpass("Enter your password: ")
-            if check_password(password, correct_password):
-                try:
-                    encrypted_note = load_from_file()
-                    decrypted_note = decrypt_message(encrypted_note, key)
-                    print(f"\nYour notes: {decrypted_note}")
-                except FileNotFoundError:
-                    print("No notes found.")
-                attempts = 0
-            else:
-                print("Incorrect password.")
-                attempts += 1
-
-        elif choice == "3":
-            break
-
+    def load_key(self):
+        key_file = "key.key"
+        if os.path.exists(key_file):
+            return open(key_file, "rb").read()
         else:
-            print("Invalid choice. Please enter 1, 2, or 3.")
+            key = Fernet.generate_key()
+            with open(key_file, "wb") as key_file:
+                key_file.write(key)
+            return key
+
+    def encrypt_message(self, message):
+        fernet = Fernet(self.key)
+        encrypted = fernet.encrypt(message.encode())
+        return encrypted
+
+    def decrypt_message(self, encrypted_message):
+        fernet = Fernet(self.key)
+        decrypted = fernet.decrypt(encrypted_message).decode()
+        return decrypted
+
+    def add_note(self):
+        note = self.note_text.get("1.0", tk.END).strip()
+        if note:
+            encrypted_note = self.encrypt_message(note)
+            self.save_to_file(encrypted_note)
+            self.note_text.delete("1.0", tk.END)
+            messagebox.showinfo("Note Added", "Note added successfully.")
+        else:
+            messagebox.showwarning("Empty Note", "Note is empty. Please enter some text.")
+
+    def save_to_file(self, encrypted_message):
+        with open("notes.txt", "wb") as file:
+            file.write(encrypted_message)
+
+    def load_from_file(self):
+        try:
+            with open("notes.txt", "rb") as file:
+                encrypted_message = file.read()
+            return encrypted_message
+        except FileNotFoundError:
+            messagebox.showwarning("No Notes Found", "No notes found.")
+            return None
+
+    def view_notes(self):
+        if self.attempts >= 3:
+            master_password = simpledialog.askstring("Locked", "Enter master password:", show='*')
+            if master_password == self.master_password:
+                self.attempts = 0
+                messagebox.showinfo("Unlocked", "Unlocked successfully.")
+            else:
+                messagebox.showerror("Error", "Incorrect master password.")
+                return
+
+        password = simpledialog.askstring("Password", "Enter your password:", show='*')
+        if password == self.correct_password:
+            encrypted_note = self.load_from_file()
+            if encrypted_note:
+                decrypted_note = self.decrypt_message(encrypted_note)
+                self.note_text.delete("1.0", tk.END)
+                self.note_text.insert("1.0", decrypted_note)
+            self.attempts = 0
+        else:
+            messagebox.showerror("Error", "Incorrect password.")
+            self.attempts += 1
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = SecureNoteApp(root)
+    root.mainloop()
